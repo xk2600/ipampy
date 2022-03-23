@@ -1,24 +1,16 @@
 import unittest
+import math
 
 def debug(message):
-	pass                           # disables debugging output
 	print(f"DEBUG: {message}")
+	pass                           # disables debugging output
 
-class netwidth(int):
-    """ similar to timespan, but for addressing mechanics. `netwidth` allows only
-        a masklen to be defined which can then be summed with a Prefix to derive
-        a new prefix.
-    """
-	pass
-	
 class Prefix:
 	""" Enables ipPrefixes to be treated like generic numeric types while
 	    preserving thier presentation and allowing subnetting and suppernetting
 	    to be applied to networks. Prefix maintains linkage to parent and child
 	    prefixes as well, allowing a tree of allocations to be observed should
 	    one use this to build IP based topologies or as tooling for IPAM functions.
-	    
-	    TODO:
 	"""
 	
 	__author__    = "Christopher M. Stephan"
@@ -26,8 +18,8 @@ class Prefix:
 	__license__   = "2-cluase BSD License"
 	__version__   = "0.1.2"
 	    
-	IPV4: Prefix = None
-	_supernet: Prefix = None
+	IPV4 = None
+	_supernet = None
 	
 	@staticmethod
 	def toBytes(netid: int = 0):
@@ -103,20 +95,23 @@ class Prefix:
 		
 	@subnetlen.setter
 	def subnetlen(self, subnetlen):
+		if isinstance(self.masklen, int) and isinstance(subnetlen, int):
+			if subnetlen < self.masklen:
+				self.subnetlen = self.masklen
 		self._subnetlen = subnetlen
 		
 	@property
 	def netpath(self):
-		result = []
+		result = [self]
 		cursor = self
 		while cursor.supernet is not Prefix.IPV4:
 			debug(f"<prefix>.netpath: cursor.supernet: {cursor.supernet}")
 			result.insert(0, cursor.supernet)
 			cursor = cursor.supernet
 		result.insert(0, cursor.supernet)
-		return resulttattr(self, arg, val)
+		return result
 	
-	def subnet(self, masklen: int = None, index=0, subnetlen=None):
+	def subnet(self, masklen=None, index=0, subnetlen=None):
 		if masklen is None:
 			masklen = self.subnetlen
 		netid = self.netid + ((1 << (32 - masklen)) * index)
@@ -130,6 +125,9 @@ class Prefix:
 			prefix.subnetlen = subnetlen
 		self._subnets[str(prefix)] = prefix
 		return prefix
+		
+	def addr(self, index=0):
+		return self.__class__(self.netid, supernet=self, boundary=boundary)
 		
 	def next(self):
 		netid = self._netid + (1 << (32 - self._masklen))
@@ -154,10 +152,11 @@ class Prefix:
 		    indexOrPrefix: (str)   prefix notation key: 
 		"""
 		try:
-			if isinstance(indexOrPRefix, slice):      # TODO: handle slices
+			if isinstance(indexOrPrefix, slice):      # TODO: handle slices
 				pass
 			if isinstance(indexOrPrefix, int):        # int index based on subnetlen
-				index = indexOrPrefix
+				index = indexOrPrefix % len(self)
+				debug("<prefix>.__getitem__: index: {index}")
 				netid = self.netid + ((1 << (32 - self.subnetlen)) * index)
 				prefix = "{netid}/{self.subnetlen}"
 			elif isinstance(indexOrPrefix, str):      # string repr of Prefix
@@ -167,7 +166,8 @@ class Prefix:
 			if prefix in self._subnets:
 				return self._subnets[prefix]
 		except IndexError as e:
-			raise IndexError("key must be int or str and reference an instance of <class Prefix>")
+			debug("<prefix>.__getitem__: index {index} does not exist, creating.")
+		return self.subnet(index=index)
 		
 	def __setitem__(self, indexOrPrefix, prefixObject):
 		# TODO: WRITE ME
@@ -183,12 +183,50 @@ class Prefix:
 		needlebegins = needle.netid
 		needleends = needle.next().netid - 1
 		return selfbegins <= needlebegins and selfends >= needleends
+	
+	def __int__(self):
+		return self.netid
+	
+	def __add__(self, operand):
+		netid = int(self) + (int(operand) % self.subnetlen)
+		debug(f"<Prefix>.__add__: {int(self)} + ({int(operand)} % {self.subnetlen}) = {netid}")
+		return __class__(netid, masklen=self.masklen, subnetlen=self.subnetlen, supernet=self)
+		
+	def __iadd__(self, operand):
+		total = self.__add__(operand)
+		self.netid = total.netid
+		return self
+	
+	# subnetting functions
+	def __truediv__(self, operand):
+		shiftlen = int(math.log2(operand))
+		masklen = min(self.masklen + shiftlen, 32)
+		debug(f"<Prefix>.__truediv__: (self.masklen, shiftlen, masklen) = " +
+		                              f"{self.masklen}, {shiftlen}, {masklen}")
+		return self.subnet(self.netid, masklen)
+		
+	__floordiv__ = __truediv__
+	
+	def __floor__(self):
+		""" return the lowest address in the prefix, aka the network address. 
+		"""
+		bshift = (32 - self.masklen)
+		netid = (self.netid >> bshift) << bshift
+		return self.__class__(netid, masklen=self.masklen, 
+			subnetlen=self.subnetlen, supernet=self)
+	
+	def __ceil__(self):
+		""" return the highest address in the prefix, aka the broadcast address. 
+		"""
+		bshift = (32 - self.masklen)
+		netid = ((self.netid >> bshift) << bshift) + (1 << bshift) - 1
+		return self.__class__(netid, masklen=self.masklen, 
+			subnetlen=self.subnetlen, supernet=self)
 		
 	def __len__(self):
-		return 1 << self.masklen
-		
-	def __ceil__(self):
-		return self.__class__(self._boundary - 1, 32, supernet=self)
+		masklendelta = (self.subnetlen - self.masklen)
+		debug(f"<prefix>.__len__: {self.subnetlen} - {self.masklen} = {masklendelta}")
+		return 1 << masklendelta
 		
 	def __index__(self):
 		pass
@@ -213,7 +251,7 @@ class Prefix:
 		
 	def __ne__(self, prefix):
 		pass
-	
+		
 	def __init__(self, prefix, masklen=None, supernet=None, subnetlen=None, boundary=None):
 		self._netid = None
 		self._masklen = None
@@ -251,83 +289,9 @@ class Prefix:
 				f"<netid>{self.netid}, " + 
 				f"<net>{self.net}, <masklen>{self.masklen}, " + 
 				f"<boundary>{self.toStr(self.boundary)}")
-				
-	# Root Prefix (All IPV4 Addressing)
-	IPV4 = __class__.(0, masklen=0, supernet=Prefix.IPV4)
-	__class__._supernet = __class__.IPV4
-ext().netid - 1
-		needlebegins = needle.netid
-		needleends = needle.next().netid - 1
-		return selfbegins <= needlebegins and selfends >= needleends
-		
-	def __len__(self):
-		return 1 << self.masklen
-		
-	def __ceil__(self):
-		return self.__class__(self._boundary - 1, 32, supernet=self)
-		
-	def __index__(self):
-		pass
-		
-	def __iter__(self):
-		pass
-		
-	def __lt__(self, prefix):
-		pass
-		
-	def __gt__(self, prefix):
-		pass
-		
-	def __le__(self, prefix):
-		pass
-		
-	def __ge__(self, prefix):
-		pass
-		
-	def __eq__(self, prefix):
-		pass
-		
-	def __ne__(self, prefix):
-		pass
-	
-	def __init__(self, prefix, masklen=None, supernet=None, subnetlen=None, boundary=None):
-		self._netid = None
-		self._masklen = None
-		self._boundary = (((2 ** 31) - 1) << 1) + 1
-		self._subnetlen = 0
-		self._subnets = {}
-		if supernet is not None:
-			self.supernet = supernet
-			self.boundary = self.supernet.boundary
-			self.subnetlen = self.supernet.subnetlen
-			debug(f"<prefix>.__init__: <prefix>.(subnetlen, boundary) ->" +
-					   f" {self.subnetlen}, {self.boundary}")
-		if subnetlen is not None:
-			self.subnetlen = subnetlen
-			debug(f"<prefix>.__init__: <prefix>.subnetlen -> {self.subnetlen}")
-		if boundary is not None:
-			self.boundary = boundary
-			debug(f"<prefix>.__init__: <prefix>.boundary -> {self.boundary}")
-		if isinstance(prefix, str):
-			try:
-				prefix = prefix.split("/")
-				debug(f"<prefix>.__init__: prefix: {prefix}, masklen: {masklen}")
-				self.net = prefix[0]
-				if len(prefix) == 1:
-					self.masklen = masklen
-				elif len(prefix) == 2:
-					self.masklen = prefix[1]
-			except:
-				raise ValueError("mask must be an integer value between 0 and 32")	
-		elif isinstance(prefix, int):
-			self._netid = prefix
-			self._masklen = masklen
-		debug(f"<prefix>.__init__: returning instance <prefix {self} of <supernet>{self.supernet} >:")
-		debug(f"                   " + 
-				f"<netid>{self.netid}, " + 
-				f"<net>{self.net}, <masklen>{self.masklen}, " + 
-				f"<boundary>{self.toStr(self.boundary)}")
-				
-	# Root Prefix (All IPV4 Addressing)
-	IPV4 = __class__.(0, masklen=0, supernet=Prefix.IPV4)
-	__class__._supernet = __class__.IPV4
+
+
+# Root Prefix (All IPV4 Addressing)
+Prefix.IPV4 = Prefix(0, masklen=0, supernet=Prefix.IPV4)
+Prefix._supernet = Prefix.IPV4
+

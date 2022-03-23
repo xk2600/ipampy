@@ -1,0 +1,19 @@
+# ignore everything in ./venv/
+venv/
+
+# vscode
+*.code-workspace
+
+# Windows thumbnails
+Thunbs.db
+
+# Python cache and pyc files
+__pycache__/
+*.pyc
+
+# tarballs
+*.tgz
+*.tar.gz
+
+# python wheel files
+*.whl
