@@ -1,7 +1,6 @@
-import unittest
-from .Prefix import Prefix
+import IPAMpy.Model.PrefixModel.PrefixModel
 
-class CidrAllocation(Prefix):
+class CidrAllocation(PrefixModel):
     def __init__(self, prefix, masklen=None, 
                         supernet=None, subnetlen=None, boundary=None, descr=None):
         self.descr = descr

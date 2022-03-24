@@ -5,7 +5,7 @@ def debug(message):
 	print(f"DEBUG: {message}")
 	pass                           # disables debugging output
 
-class Prefix:
+class PrefixModel:
 	""" Enables ipPrefixes to be treated like generic numeric types while
 	    preserving thier presentation and allowing subnetting and suppernetting
 	    to be applied to networks. Prefix maintains linkage to parent and child
@@ -290,6 +290,9 @@ class Prefix:
 				f"<net>{self.net}, <masklen>{self.masklen}, " + 
 				f"<boundary>{self.toStr(self.boundary)}")
 
+
+class Prefix(PrefixModel):
+	pass
 
 # Root Prefix (All IPV4 Addressing)
 Prefix.IPV4 = Prefix(0, masklen=0, supernet=Prefix.IPV4)
